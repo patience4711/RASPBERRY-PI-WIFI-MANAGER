@@ -22,7 +22,7 @@ We need a modern raspberry linux bookworm with flask and Perl installed.<br>
 **apt install libcgi-pm-perl**<br>
 
 ## setup hotspot
-first of all we need a hotspot connection. We do that with a sequence of nmcli commands.
+first of all we need a hotspot connection. We do that with a sequence of nmcli commands.<br>
 **nano setup_hotspot.sh**<br>
 ```
 #!/usr/bin/env bash<br>
@@ -46,7 +46,7 @@ nmcli connection modify HOTSPOT connection.autoconnect-priority -999<br>
 echo "[INFO] Hotspot setup complete."<br>
 echo "[INFO] Start it manually with: nmcli connection up HOTSPOT"'<br>
 ```
-Edit this script to your needs and make it executable **chmod +x setup_hotspot.sh**
+Edit this script to your needs, make it executable **chmod +x setup_hotspot.sh**<br> and run it **./setup_hotspot.sh**<br>
 
 When this has run, we do  **ls /etc/NetworkManager/system-connections**. It should now contain HOTSPOT.nmconnection
 ## setup flask
