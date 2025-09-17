@@ -236,12 +236,13 @@ In the page you have on top:
 $server_ip = $_SERVER['SERVER_ADDR'];  // Apache's IP
 ?>
 ```
-After the <body> you have this  
+After the body tag you can have this  
 ```
 <?php if ($server_ip === "192.168.4.1"): ?>
+<!-- display a link to 192.168.4.1:5000 or an iframe with source="192.168.4.1:5000" -->
 <center> <a href="http://192.168.4.1:5000/">Wi-Fi Config</a>
 <?php else: ?>
-    <!-- here comes your regular homepage
+    <!-- here comes your regular homepage -->
   <?php endif; ?>
 ```
 Now when the hotspot is running you'l see the link to the wifiform and when normal connected<br>
