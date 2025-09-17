@@ -2,7 +2,7 @@ A very simple wifimanager using Network Manager. Easy to setup in 4 simple steps
 
 When you want your raspberry project to be portable so that it is easy to connect to any wifi network, you want to try this.<br>
 When powered up, the rpi tries to connect and if it failes, it opens a hotspot with ip 192.168.4.1. <br>
-If you connect to that and browse to this address you'l get a form to fill up the wificrecdentials. <br>
+If you connect to that and browse to this address, you'l get a form to fill up the wificrecdentials. <br>
 When done, click submit and your raspberry is connected. Very simple and fast.
 
 The hotspot times out after 5 minutes and then the rpi will reboot.  So in case of a grid failure it will always reconnect, even when your router comes up very slow.
