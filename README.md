@@ -1,9 +1,13 @@
-# RASPBERRY-PI-WIFI-MANAGER
-a simple wifimanager using Network Manager
+A very simple wifimanager using Network Manager
 
-When you want your raspberry project to be protable so that it is easy to connect to any wifi network, this will help.
-When powered up, the rpi tries to connect and if it failes, it opens a hotspot with ip 192.168.4.1:5000. If you browse to that
-you'l get a form to fill up the wificrecdentials. Click submit and your raspberry is connected. Very simple and fast.
+When you want your raspberry project to be portable so that it is easy to connect to any wifi network, you want to try this.<br>
+When powered up, the rpi tries to connect and if it failes, it opens a hotspot with ip 192.168.4.1. <br>
+If you connect to that and browse to this address you'l get a form to fill up the wificrecdentials. <br>
+When done, click submit and your raspberry is connected. Very simple and fast.
+
+The hotspot times out after 5 minutes and then the rpi will reboot.  So in case of a grid failure it will always reconnect, even when your router comes up very slow.
+**Important** if your system runs a webserver, we need to change the portnumber of the flask server, please see at the bottom of this page 
+[additional server](#additional-server)
 
 So what do we need. 
 We need a modern raspberry linux bookworm with flask and Perl installed.
@@ -12,7 +16,7 @@ We need a modern raspberry linux bookworm with flask and Perl installed.
 **apt install libcgi-pm-perl**
 
 first of all we need a hotspot connection. We do that with a sequence of nmcli commands.
-**nano setup_hotspot.py**<br>
+**nano setup_hotspot.sh**<br>
 ```
 #!/usr/bin/env bash<br>
 set -e
@@ -23,7 +27,7 @@ if nmcli connection show | grep -q "HOTSPOT"; then<br>
     nmcli connection delete HOTSPOT<br>
 fi<br>
 # Create new hotspot connection<br>
-nmcli connection add type wifi ifname wlan0 con-name HOTSPOT ssid RPIHOTSPOT123<br>
+nmcli connection add type wifi ifname wlan0 con-name HOTSPOT ssid RPI-HOTSPOT<br>
 nmcli connection modify HOTSPOT 802-11-wireless.mode ap<br>
 nmcli connection modify HOTSPOT 802-11-wireless.band bg<br>
 nmcli connection modify HOTSPOT ipv4.method shared<br>
@@ -35,9 +39,11 @@ nmcli connection modify HOTSPOT connection.autoconnect-priority -999<br>
 echo "[INFO] Hotspot setup complete."<br>
 echo "[INFO] Start it manually with: nmcli connection up HOTSPOT"'<br>
 ```
-When this has run, we do  ls /etc/NetworkManager/system-connections. it should now contain HOTSPOT.nmconnection
+Edit this script to your needs and make it executable **chmod +x setup_hotspot.sh**
 
-We need a python script that checks the wifi connection and eventally opens the accesspoint and serves the form
+When this has run, we do  **ls /etc/NetworkManager/system-connections**. It should now contain HOTSPOT.nmconnection
+
+We need a python script that checks the wifi connection and, if needed, opens the accesspoint and serves the form.
 **nano /home/user/wificonfig.py**
 ```
 #!/usr/bin/env python3 
@@ -151,7 +157,7 @@ if __name__ == "__main__":
     set_led(True)
     # Start timeout monitor thread
     threading.Thread(target=monitor_wifi_and_timeout, daemon=True).start()
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=80)
 ```
 Ctrl x
 
@@ -216,10 +222,12 @@ make this script executable **chmod +x /usr/lib/cgi-bin/reboot.pl**
 run ./wificonfig.py from the commandline to check for errors. 
 check if the service is running **systemctl status wificonfig.service**
 
-##homepage
-If you run a server and have a homepage, you can do a smart trick that integrates the flask server and the other.
+## additional server
+If you don't have another server in your system, you can point the last line in wificonfig.py to port 5000 instead of 80
+so it doesn't conflict with your webserver.<br>
+To prevent that you have to remember this portnumber, here is a smart trick that integrates the flask server and the other.<br>
 Rename your index.html to index.php and ensure that you have php installed<br>
-**sudo apt update""
+**sudo apt update**
 **sudo apt install php libapache2-mod-php -y** 
 **sudo systemctl restart apache2**
 In the page you have on top: 
@@ -236,5 +244,5 @@ After the <body> you have this
     <!-- here comes your regular homepage
   <?php endif; ?>
 ```
-So now when the hotspot is running you'l see the link to the wifiform and when normal connected<br>
+Now when the hotspot is running you'l see the link to the wifiform and when normal connected<br>
 you'l see your homepage.
