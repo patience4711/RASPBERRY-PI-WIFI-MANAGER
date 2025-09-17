@@ -218,7 +218,7 @@ and finally we need a script that reboots the raspberry when the portal times ou
 ```
 make this script executable **chmod +x /usr/lib/cgi-bin/reboot.pl**
 
-##test
+## test
 run ./wificonfig.py from the commandline to check for errors. 
 check if the service is running **systemctl status wificonfig.service**
 
