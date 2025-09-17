@@ -1,4 +1,4 @@
-A very simple wifimanager using Network Manager
+A very simple wifimanager using Network Manager. Easy to setup in 4 simple steps.
 
 When you want your raspberry project to be portable so that it is easy to connect to any wifi network, you want to try this.<br>
 When powered up, the rpi tries to connect and if it failes, it opens a hotspot with ip 192.168.4.1. <br>
@@ -9,12 +9,19 @@ The hotspot times out after 5 minutes and then the rpi will reboot.  So in case 
 **Important** if your system runs a webserver, we need to change the portnumber of the flask server, please see at the bottom of this page 
 [additional server](#additional-server)
 
-So what do we need. 
-We need a modern raspberry linux bookworm with flask and Perl installed.
-**apt install python3-flask**
-**apt install perl**
-**apt install libcgi-pm-perl**
+## the 4 mainsteps are
+[hotspot connection](#setup-hotspot)
+<br>[setup flask](#setup-flask)
+<br>[setup service](#setup-service)
+<br>[reboot script](#reboot-script)
 
+So what do we need. 
+We need a modern raspberry linux bookworm with flask and Perl installed.<br>
+**apt install python3-flask**<br>
+**apt install perl**<br>
+**apt install libcgi-pm-perl**<br>
+
+## setup hotspot
 first of all we need a hotspot connection. We do that with a sequence of nmcli commands.
 **nano setup_hotspot.sh**<br>
 ```
@@ -42,7 +49,7 @@ echo "[INFO] Start it manually with: nmcli connection up HOTSPOT"'<br>
 Edit this script to your needs and make it executable **chmod +x setup_hotspot.sh**
 
 When this has run, we do  **ls /etc/NetworkManager/system-connections**. It should now contain HOTSPOT.nmconnection
-
+## setup flask
 We need a python script that checks the wifi connection and, if needed, opens the accesspoint and serves the form.
 **nano /home/user/wificonfig.py**
 ```
@@ -160,7 +167,7 @@ if __name__ == "__main__":
     app.run(host="0.0.0.0", port=80)
 ```
 Ctrl x
-
+## setup service
 The next thing to do is setup a service that runs at boot and starts /home/user/wificonfig.py
 **nano /etc/systemd/system/wificonfig.service**
 ```
@@ -187,7 +194,7 @@ we need to enable the service
 **systemctl daemon-reload**
 **systemctl enable wificonfig.service**
 **systemctl start wificonfig.service**
-
+## reboot script
 and finally we need a script that reboots the raspberry when the portal times out (after 5 minutes)
 **nano /usr/lib/cgi-bin/reboot.pl**
 ```
@@ -219,11 +226,14 @@ and finally we need a script that reboots the raspberry when the portal times ou
 make this script executable **chmod +x /usr/lib/cgi-bin/reboot.pl**
 
 ## test
+It is important to test everything well. Be sure that the flask server is not pointed to the same port as an eventual other server in your system (see below). If there is an error you may need to put the sd card in a cardreader and use a linux system to edit.<br>
 run ./wificonfig.py from the commandline to check for errors. 
 check if the service is running **systemctl status wificonfig.service**
+**nmcli connection up HOTSPOT** check in your networks if it is there. You can try to connect to it. When succeeded you can open a terminal on the ip and issue **nmcli connection down HOTSPOT**<br>
+When everything works and you are connected to wifi, you can **nmcli connection show --active** to find the active connection. We are going to corrupt this, so that it cannot connect on reboot. Lets assume the active connection is hansiart.  you can **ls /etc/NetworkManager/system-connections** now you will see the name is hansiart.nmconnection. Now **nano /etc/NetworkManager/system-connection/hansiart.nmconnection** and edit the psk= to make it invalid to your wifi. Ctrl x to save and reboot. After a minute, the onboard led activity stops and the led is on. Now connect to the hotspot and browse to 192.168.4.1 (add :portnumber when it is not 80). Fill up the form and submit. Now after a lot of flashing the onboard led goes out. The rpi is are connected to your wifi.  
 
 ## additional server
-If you don't have another server in your system, you can point the last line in wificonfig.py to port 5000 instead of 80
+If you have another server in your system that serves a homepage, you can point the last line in wificonfig.py to port 5000 instead of 80
 so it doesn't conflict with your webserver.<br>
 To prevent that you have to remember this portnumber, here is a smart trick that integrates the flask server and the other.<br>
 Rename your index.html to index.php and ensure that you have php installed<br>
