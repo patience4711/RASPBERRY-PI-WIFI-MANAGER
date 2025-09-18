@@ -9,6 +9,13 @@ The hotspot times out after 5 minutes and then the rpi will reboot.  So in case 
 **Important** if your system runs a webserver, we need to change the portnumber of the flask server, please see at the bottom of this page 
 [additional server](#additional-server)
 
+## how does it work
+At boot a service is started that runs wificonfig.py<br>
+This checks whether there is a wifi connection.<br>
+If not, it starts a hotspot and a flask server that serves a form on the configured location
+We can connect to the hotspot and browse to the location to fill up and submit the form
+If the wificredentials are correct, the raspberry will connect.
+
 ## the 4 mainsteps are
 [hotspot connection](#setup-hotspot)
 <br>[setup flask](#setup-flask)
@@ -22,7 +29,9 @@ We need a modern raspberry linux bookworm with flask and Perl installed.<br>
 **apt install libcgi-pm-perl**<br>
 
 ## setup hotspot
-first of all we need a hotspot connection. We do that with a sequence of nmcli commands.<br>
+first of all we need to setup a hotspot connection in NetworkManager. We do that with a sequence of nmcli commands.<br>
+You can issue these commands manually or using a sript. Change ssid and passwd (psk) to your needs. Beware that when you change<br>
+the ssid, you should alse do that in wificonfig.py !<br>
 **nano setup_hotspot.sh**<br>
 ```
 #!/usr/bin/env bash<br>
@@ -61,11 +70,6 @@ import threading
 import os
 
 app = Flask(__name__)
-logfile = "/home/hans/wificonfig_reboot.txt"
-
-# Write a startup entry
-#with open(logfile, "a") as f:
-#    f.write(f"[STARTUP] Script started at {time.ctime()}\n")
 
 html_form = """
 <!DOCTYPE html>
@@ -110,12 +114,10 @@ def check_wifi_connection():
     return None
 
 def monitor_wifi_and_timeout():
-    """Wait 5 minutes, then reboot if still no Wi-Fi connected"""
+    """Wait 5 minutes, then reboot if still not Wi-Fi connected"""
     time.sleep(300)  # 5 minutes
     ssid = check_wifi_connection()
-    if not ssid or ssid == "HOTSPOT":
-        # with open("/home/hans/wificonfig_reboot.txt", "a") as f:
-        #     f.write(f"[INFO] Wi-Fi not connected, rebooting at {time.ctime()}\n")
+    if not ssid or ssid == "RPI_HOTSPOT": # check this in HOTSPOT.nmconnection
         print("[INFO] Wi-Fi not connected after 5 minutes, rebooting.")
         subprocess.run(["perl", "/usr/lib/cgi-bin/reboot.pl"])
 
@@ -168,7 +170,8 @@ if __name__ == "__main__":
 ```
 Ctrl x
 ## setup service
-The next thing to do is setup a service that runs at boot and starts /home/user/wificonfig.py
+The next thing to do is setup a service that starts at boot and runs /home/user/wificonfig.py<br>
+This service stops once wificonfig.py has run.
 **nano /etc/systemd/system/wificonfig.service**
 ```
 [Unit]
