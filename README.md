@@ -8,6 +8,8 @@ When you want your headless raspberry project to be portable so that it is easy 
 - If not, it starts a hotspot and a flask server that serves a form on the configured location
 - We can connect to the hotspot and browse to the location to fill up and submit the form
 - If the wificredentials are correct, the raspberry will connect.
+- we can find the ip by browsing to <hostname>.local:8000 e.g. rpi_domo.local:8000  or rpi_domo:8000<br>
+  ![ipdisc](https://github.com/user-attachments/assets/0ab5b0d7-b675-4617-833e-1f81b9776904)
 
 The hotspot times out after 5 minutes and then the rpi will reboot.  So in case of a grid failure it will always reconnect, even when your router comes up very slow.
 **Important** if your system already runs a webserver, we need to change the portnumber of the flask server. Please see at the bottom of this page 
@@ -57,6 +59,7 @@ Edit this script to your needs, make it executable **chmod +x setup_hotspot.sh**
 When this has run, we do  **ls /etc/NetworkManager/system-connections**. It should now contain HOTSPOT.nmconnection
 ## setup flask
 We need a python script that checks the wifi connection and, if needed, opens the accesspoint and serves the form.
+
 **nano /home/user/wificonfig.py**
 ```
 #!/usr/bin/env python3 
@@ -87,16 +90,17 @@ html_form = """
 """
 LED_PATH = "/sys/class/leds/ACT/brightness"
 
-def set_led(state):
-    """Turn the green ACT LED on/off"""
+def set_led(state: bool):
     value = "1" if state else "0"
     try:
-        subprocess.run(["bash", "-c", f"echo {value} > {LED_PATH}"], check=True)
+        with open(LED_PATH, "w") as f:
+            f.write(value)
     except Exception as e:
         print(f"[WARN] Could not set LED: {e}")
 
+
 def check_wifi_connection():
-    """Return SSID if connected, None otherwise"""
+    """Return connection name if connected, None otherwise"""
     try:
         result = subprocess.run(
             ["nmcli", "-t", "-f", "DEVICE,STATE,CONNECTION", "device"],
@@ -113,13 +117,16 @@ def check_wifi_connection():
 def monitor_wifi_and_timeout():
     """Wait 5 minutes, then reboot if still not Wi-Fi connected"""
     time.sleep(300)  # 5 minutes
-    ssid = check_wifi_connection()
-    if not ssid or ssid == "RPI_HOTSPOT": # check this in HOTSPOT.nmconnection
+    conn_name = check_wifi_connection()
+    if not conn_name or conn_name == "HOTSPOT": # check this in HOTSPOT.nmconnection
         print("[INFO] Wi-Fi not connected after 5 minutes, rebooting.")
         subprocess.run(["perl", "/usr/lib/cgi-bin/reboot.pl"])
 
 @app.route("/", methods=["GET", "POST"])
 def index():
+    conn_name = check_wifi_connection()
+    if conn_name and conn_name != "HOTSPOT":
+        return f"<center><h1>Raspberry Pi IP:</h1><p>{get_ip()}</p></center>"
     message = None
     if request.method == "POST":
         ssid = request.form["ssid"]
@@ -159,16 +166,41 @@ def index():
 
     return render_template_string(html_form, message=message)
 
+def get_ip():
+    import socket
+    ip = "Unknown"
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        pass
+    return ip
+
 if __name__ == "__main__":
-    set_led(True)
+
+    try:
+        with open("/sys/class/leds/ACT/trigger", "w") as f:
+            f.write("none")
+    except Exception as e:
+        print(f"[WARN] Could not disable LED trigger: {e}")
+
+    # Check Wi-Fi at startup
+    conn_name = check_wifi_connection()
+    if conn_name and conn_name != "HOTSPOT":
+        set_led(False)  # LED off if Wi-Fi already connected
+    else:
+        set_led(True)   # LED on if no Wi-Fi / hotspot active
     # Start timeout monitor thread
     threading.Thread(target=monitor_wifi_and_timeout, daemon=True).start()
-    app.run(host="0.0.0.0", port=80)
+    app.run(host="0.0.0.0", port=8000)
+
 ```
 Ctrl x
 ## setup service
 The next thing to do is setup a service that starts at boot and runs /home/user/wificonfig.py<br>
-This service stops once wificonfig.py has run.
+This service automaztically after 6 minutes. During this time we can discover the ip (rpi_domo:8000)
 **nano /etc/systemd/system/wificonfig.service**
 ```
 [Unit]
@@ -181,13 +213,17 @@ Type=simple
 User=root
 WorkingDirectory=/home/hans
 ExecStart=/usr/bin/python3 /home/hans/wificonfig.py
-Restart=no
-# Make sure service is killed cleanly if something hangs
-TimeoutStopSec=5
+
+
+# Stop the service after 6 minutes (360 seconds)
+RuntimeMaxSec=360
 KillMode=process
+
+Restart=no
 
 [Install]
 WantedBy=multi-user.target
+
 ```
 Ctrl x
 we need to enable the service
