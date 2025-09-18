@@ -3,11 +3,11 @@ A very simple wifimanager using Network Manager. Easy to setup in 4 simple steps
 When you want your headless raspberry project to be portable so that it is easy to connect to any wifi network, you need this.<br>
 
 ## how does it work
-At boot a service is started that runs wificonfig.py<br>
-This checks whether there is a wifi connection.<br>
-If not, it starts a hotspot and a flask server that serves a form on the configured location
-We can connect to the hotspot and browse to the location to fill up and submit the form
-If the wificredentials are correct, the raspberry will connect.
+- At boot a service is started that runs wificonfig.py<br>
+- This checks whether there is a wifi connection.<br>
+- If not, it starts a hotspot and a flask server that serves a form on the configured location
+- We can connect to the hotspot and browse to the location to fill up and submit the form
+- If the wificredentials are correct, the raspberry will connect.
 
 The hotspot times out after 5 minutes and then the rpi will reboot.  So in case of a grid failure it will always reconnect, even when your router comes up very slow.
 **Important** if your system already runs a webserver, we need to change the portnumber of the flask server. Please see at the bottom of this page 
