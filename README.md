@@ -82,6 +82,8 @@ html_form = """
     Password: <input type="password" name="password"><br><br>
     <input type="submit" value="Connect">
   </form>
+  <br><br><br><b>after submission, please browse to rpi-domo:8000
+  <br>or rpi-domo.local:8000 to see the IP address</b>
   {% if message %}
   <p>{{ message }}</p>
   {% endif %}
@@ -89,6 +91,11 @@ html_form = """
 </html>
 """
 LED_PATH = "/sys/class/leds/ACT/brightness"
+
+def log_debug(msg):
+    """Append a message with timestamp to wifidebug.txt"""
+    with open("/home/hans/wifidebug.txt", "a") as f:
+        f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {msg}\n")
 
 def set_led(state: bool):
     value = "1" if state else "0"
@@ -116,11 +123,27 @@ def check_wifi_connection():
 
 def monitor_wifi_and_timeout():
     """Wait 5 minutes, then reboot if still not Wi-Fi connected"""
+    log_debug("Monitor thread started. Waiting for 5 minutes.")
     time.sleep(300)  # 5 minutes
+    print("[INFO] 5 minutes timed out.")
+
+    #subprocess.run(["nmcli", "connection", "down", "HOTSPOT"], check=False)
+    log_debug("5 minutes timeout reached.")
+
+    # Check Wi-Fi connection
     conn_name = check_wifi_connection()
-    if not conn_name or conn_name == "HOTSPOT": # check this in HOTSPOT.nmconnection
+    if not conn_name or conn_name == "HOTSPOT":
+        log_debug("Wi-Fi not connected after 5 minutes. Rebooting now...")
         print("[INFO] Wi-Fi not connected after 5 minutes, rebooting.")
-        subprocess.run(["perl", "/usr/lib/cgi-bin/reboot.pl"])
+        try:
+            # Direct Python reboot
+            subprocess.run(["systemctl", "reboot"], check=True)
+            log_debug("Systemctl reboot command executed successfully.")
+        except Exception as e:
+            log_debug(f"Failed to execute reboot: {e}")
+    else:
+        log_debug("Wi-Fi connected ({conn_name}), no reboot needed.")
+        print(f"[INFO] Wi-Fi connected ({conn_name}), no reboot needed.")
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -157,7 +180,8 @@ def index():
             connected = check_wifi_connection()
             if connected == ssid:
                 message = f"Connected to {ssid}. The setup server will shut down shortly."
-                subprocess.run(["nmcli", "connection", "down", "HOTSPOT"], check=False)
+                log_debug("a connection was made")
+                #subprocess.run(["nmcli", "connection", "down", "HOTSPOT"], check=False)
                 set_led(False)  # Turn LED off when Wi-Fi connects
             else:
                 message = f"Failed to connect to {ssid}."
@@ -179,23 +203,32 @@ def get_ip():
     return ip
 
 if __name__ == "__main__":
-
+    #clear the log at start
+    open("/home/hans/wifidebug.txt", "w").close()
+    log_debug(" * * * * * * start wificonfig.py " * * * * * *")
     try:
         with open("/sys/class/leds/ACT/trigger", "w") as f:
             f.write("none")
     except Exception as e:
         print(f"[WARN] Could not disable LED trigger: {e}")
 
-    # Check Wi-Fi at startup
-    conn_name = check_wifi_connection()
-    if conn_name and conn_name != "HOTSPOT":
-        set_led(False)  # LED off if Wi-Fi already connected
+    # Wait a bit for Wi-Fi to initialize
+    for _ in range(10):  # 10 attempts, 1 sec apart
+        conn_name = check_wifi_connection()
+        if conn_name and conn_name != "HOTSPOT":
+            set_led(False)
+            log_debug("we were connected at start")
+            break
+
+        time.sleep(1)
     else:
-        set_led(True)   # LED on if no Wi-Fi / hotspot active
+        # Wi-Fi still not connected, keep LED on
+        set_led(True)
+        log_debug("we were not connected at start")
+
     # Start timeout monitor thread
     threading.Thread(target=monitor_wifi_and_timeout, daemon=True).start()
     app.run(host="0.0.0.0", port=8000)
-
 ```
 Ctrl x
 ## setup service
