@@ -5,10 +5,10 @@ When you want your headless raspberry project to be portable so that it is easy 
 ## how does it work
 - At boot a service is started that runs wificonfig.py<br>
 - This checks whether there is a wifi connection.<br>
-- If not, it starts a hotspot and a flask server that serves a form on the configured location
+- If not, it starts a hotspot and a flask server that serves a form on the configured location (wificonfig.py)
 - We can connect to the hotspot and browse to the location to fill up and submit the form
-- If the wificredentials are correct, the raspberry will connect.
-- we can find the ip by browsing to <hostname>.local:8000 e.g. rpi_domo.local:8000  or rpi_domo:8000<br>
+- If the wificredentials are correct, the raspberry will connect and the page.
+- we can find the ip by browsing to <hostname>.local:8000 e.g. rpi-domo.local:8000  or rpi_domo:8000<br>
   ![ipdisc](https://github.com/user-attachments/assets/0ab5b0d7-b675-4617-833e-1f81b9776904)
 
 The hotspot times out after 5 minutes and then the rpi will reboot.  So in case of a grid failure it will always reconnect, even when your router comes up very slow.
@@ -29,8 +29,8 @@ We need a modern raspberry linux bookworm with flask and Perl installed.<br>
 
 ## setup hotspot
 first of all we need to setup a hotspot connection in NetworkManager. We do that with a sequence of nmcli commands.<br>
-You can issue these commands manually or using a sript. Change ssid and passwd (psk) to your needs. Beware that when you change<br>
-the ssid, you should alse do that in wificonfig.py !<br>
+You can issue these commands manually or using a script. Change ssid and passwd (psk) to your needs. <br<Beware that when you change
+the con-nane, you should also do that in wificonfig.py !<br>
 **nano setup_hotspot.sh**<br>
 ```
 #!/usr/bin/env bash<br>
@@ -205,7 +205,7 @@ def get_ip():
 if __name__ == "__main__":
     #clear the log at start
     open("/home/hans/wifidebug.txt", "w").close()
-    log_debug(" * * * * * * start wificonfig.py " * * * * * *")
+    log_debug(" * * * * * * start wificonfig.py " * * * * * * ")
     try:
         with open("/sys/class/leds/ACT/trigger", "w") as f:
             f.write("none")
@@ -219,7 +219,6 @@ if __name__ == "__main__":
             set_led(False)
             log_debug("we were connected at start")
             break
-
         time.sleep(1)
     else:
         # Wi-Fi still not connected, keep LED on
@@ -247,59 +246,27 @@ User=root
 WorkingDirectory=/home/hans
 ExecStart=/usr/bin/python3 /home/hans/wificonfig.py
 
-
 # Stop the service after 6 minutes (360 seconds)
+# that wil also stop wificonfig.py (the flask server)
 RuntimeMaxSec=360
 KillMode=process
-
 Restart=no
 
 [Install]
 WantedBy=multi-user.target
-
 ```
 Ctrl x
 we need to enable the service
 **systemctl daemon-reload**
 **systemctl enable wificonfig.service**
 **systemctl start wificonfig.service**
-## reboot script
-and finally we need a script that reboots the raspberry when the portal times out (after 5 minutes)
-**nano /usr/lib/cgi-bin/reboot.pl**
-```
- #!/usr/bin/perl
- use strict;
- use warnings;
 
- use CGI;
- print CGI::header();
- print "";
- print "<html>";
- print "<head>";
-
- print "</head>";
- print "<body><span style='font-size:12px; font-family: arial;'>";
-
- $| = 1;
-
- my $rebootcmd = "sudo /sbin/reboot";
- print "<br>system going to reboot...<br>\n";
- print "\n<br> WARNING: this may take some time !";
- print "\n<br> the ECU is not reponsive during this time !";
- #sleep(5);
-  system($rebootcmd);
- print "\n\n<h3>after a minute, click \"X\" (right above)</h3>";
-
- print "HTTP/1.1 200 OK";
-```
-make this script executable **chmod +x /usr/lib/cgi-bin/reboot.pl**
-
-## test
+## testing
 It is important to test everything well. Be sure that the flask server is not pointed to the same port as an eventual other server in your system (see below). If there is an error you may need to put the sd card in a cardreader and use a linux system to edit.<br>
-run ./wificonfig.py from the commandline to check for errors. 
+First run python3 wificonfig.py from the commandline to check for errors. 
 check if the service is running **systemctl status wificonfig.service**
 **nmcli connection up HOTSPOT** check in your networks if it is there. You can try to connect to it. When succeeded you can open a terminal on the ip and issue **nmcli connection down HOTSPOT**<br>
-When everything works and you are connected to wifi, you can **nmcli connection show --active** to find the active connection. We are going to corrupt this, so that it cannot connect on reboot. Lets assume the active connection is hansiart.  you can **ls /etc/NetworkManager/system-connections** now you will see the name is hansiart.nmconnection. Now **nano /etc/NetworkManager/system-connection/hansiart.nmconnection** and edit the psk= to make it invalid to your wifi. Ctrl x to save and reboot. After a minute, the onboard led activity stops and the led is on. Now connect to the hotspot and browse to 192.168.4.1 (add :portnumber when it is not 80). Fill up the form and submit. Now after a lot of flashing the onboard led goes out. The rpi is are connected to your wifi.  
+When everything works and you are connected to wifi, you can **nmcli connection show --active** to find the active connection. We are going to corrupt this, so that it cannot connect on reboot. Lets assume the active connection is hansiart.  You can **ls /etc/NetworkManager/system-connections** now you will see the name is hansiart.nmconnection. Now **nano /etc/NetworkManager/system-connection/hansiart.nmconnection** and edit the psk= to make it invalid to your wifi. Ctrl x to save and reboot. After a minute, the onboard led activity stops and the led goes on. Now the hotspot shows up in the available networks. Connect to the hotspot and browse to 192.168.4.1:8000 (add :portnumber when it is not 80). Fill up the form and submit. Now after a lot of flashing the onboard led goes out. The rpi is are connected to your wifi.  
 
 ## additional server
 If you have another server in your system that serves a homepage, you can point the last line in wificonfig.py to port 5000 instead of 80
