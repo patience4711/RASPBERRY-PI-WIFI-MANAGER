@@ -11,7 +11,7 @@ When you want your headless raspberry project to be portable so that it is easy 
 - we can find the ip by browsing to <hostname>.local:8000 e.g. rpi-domo.local:8000  or rpi_domo:8000<br>
   ![ipdisc](https://github.com/user-attachments/assets/0ab5b0d7-b675-4617-833e-1f81b9776904)
 
-The hotspot times out after 5 minutes and then the rpi will reboot.  So in case of a grid failure it will always reconnect, even when your router comes up very slow.
+When the hotspot is up and nothing happens (no user attempts to connect), it times out after 5 minutes and then the rpi will reboot.  So in case of a grid failure it will always reconnect, even when your router comes up very slow.
 **Important** if your system already runs a webserver, we need to change the portnumber of the flask server. Please see at the bottom of this page 
 [additional server](#additional-server)
 
