@@ -16,260 +16,69 @@ The hotspot times out after 5 minutes and then the rpi will reboot.  So in case 
 [additional server](#additional-server)
 
 ## the 4 mainsteps are
-[hotspot connection](#setup-hotspot)
+[download files](#download-files)
+<br>[hotspot connection](#setup-hotspot)
 <br>[setup flask](#setup-flask)
 <br>[setup service](#setup-service)
-<br>[reboot script](#reboot-script)
+
 
 So what do we need. 
-We need a modern raspberry linux bookworm with flask and Perl installed.<br>
+We need a modern raspberry linux that runs networkmanager (bookworm) with flask and Perl installed.<br>
 **apt install python3-flask**<br>
-**apt install perl**<br>
-**apt install libcgi-pm-perl**<br>
+
+## download_files
+Make a directory on your raspberry e.g. /home/<username> and download the 3 files into this location.
+If you are in an ssh session be sure you are root (sudo su)
+Check that the scripts have the needed permissions.<br>
+ - chmod +x setup-hotspot.sh
+ - chmod +x wificonfig.py
 
 ## setup hotspot
 first of all we need to setup a hotspot connection in NetworkManager. We do that with a sequence of nmcli commands.<br>
-You can issue these commands manually or using a script. Change ssid and passwd (psk) to your needs. <br<Beware that when you change
-the con-nane, you should also do that in wificonfig.py !<br>
-**nano setup_hotspot.sh**<br>
-```
-#!/usr/bin/env bash<br>
-set -e
-echo "[INFO] Creating Wi-Fi hotspot profile: HOTSPOT"
-# Delete any existing HOTSPOT profile first <br>
-if nmcli connection show | grep -q "HOTSPOT"; then<br>
-    echo "[INFO] Removing old HOTSPOT connection..."<br>
-    nmcli connection delete HOTSPOT<br>
-fi<br>
-# Create new hotspot connection<br>
-nmcli connection add type wifi ifname wlan0 con-name HOTSPOT ssid RPI-HOTSPOT<br>
-nmcli connection modify HOTSPOT 802-11-wireless.mode ap<br>
-nmcli connection modify HOTSPOT 802-11-wireless.band bg<br>
-nmcli connection modify HOTSPOT ipv4.method shared<br>
-nmcli connection modify HOTSPOT ipv4.addresses 192.168.4.1/24<br>
-nmcli connection modify HOTSPOT wifi-sec.key-mgmt wpa-psk<br>
-nmcli connection modify HOTSPOT wifi-sec.psk "RPIHOTSPOT123"<br>
-nmcli connection modify HOTSPOT connection.autoconnect yes<br>
-nmcli connection modify HOTSPOT connection.autoconnect-priority -999<br>
-echo "[INFO] Hotspot setup complete."<br>
-echo "[INFO] Start it manually with: nmcli connection up HOTSPOT"'<br>
-```
-Edit this script to your needs, make it executable **chmod +x setup_hotspot.sh**<br> and run it **./setup_hotspot.sh**<br>
-
+You can issue these commands manually or using the script. Change ssid and passwd (psk) to your needs. 
+<br>Beware that when you change the con-nane, you should also do that in wificonfig.py !<br>
+When done, you can run the script **./setup_hotspot.sh**<br>
 When this has run, we do  **ls /etc/NetworkManager/system-connections**. It should now contain HOTSPOT.nmconnection
+With **cat /etc/NetworkManager/system-connections/<your_name>.nmconnection** you can inspect that it is what you wanted.
+We can manually bring it up **nmcli connection up HOTSPOT** Check in your networks if it is there and inspect its properties.<br>
+**nmcli connection down HOTSPOT** to bring it doen again.
+
 ## setup flask
-We need a python script that checks the wifi connection and, if needed, opens the accesspoint and serves the form.
+The python script 'wificonfig.sh does the important things 
+ - checks that there is a wifi connection
+ - if not connected, put the led on, opens the hotspot and serves the wifi form
+ - when a connection has made it closes the hotspot, the led goes out and it serves a webpage with the IP
 
-**nano /home/user/wificonfig.py**
-```
-#!/usr/bin/env python3 
-from flask import Flask, request, render_template_string
-import subprocess
-import time
-import threading
-import os
+When done you should test with **python3 wificonfig.py** for errors.
 
-app = Flask(__name__)
-
-html_form = """
-<!DOCTYPE html>
-<html>
-<head><title>Wi-Fi Setup</title></head>
-<body><center><br><br><br>
-  <h2>Hansiart Wi-Fi Credentials</h2>
-  <form method="post">
-    SSID: <input type="text" name="ssid"><br><br>
-    Password: <input type="password" name="password"><br><br>
-    <input type="submit" value="Connect">
-  </form>
-  <br><br><br><b>after submission, please browse to rpi-domo:8000
-  <br>or rpi-domo.local:8000 to see the IP address</b>
-  {% if message %}
-  <p>{{ message }}</p>
-  {% endif %}
-</body>
-</html>
-"""
-LED_PATH = "/sys/class/leds/ACT/brightness"
-
-def log_debug(msg):
-    """Append a message with timestamp to wifidebug.txt"""
-    with open("/home/hans/wifidebug.txt", "a") as f:
-        f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {msg}\n")
-
-def set_led(state: bool):
-    value = "1" if state else "0"
-    try:
-        with open(LED_PATH, "w") as f:
-            f.write(value)
-    except Exception as e:
-        print(f"[WARN] Could not set LED: {e}")
-
-
-def check_wifi_connection():
-    """Return connection name if connected, None otherwise"""
-    try:
-        result = subprocess.run(
-            ["nmcli", "-t", "-f", "DEVICE,STATE,CONNECTION", "device"],
-            capture_output=True, text=True, check=True
-        )
-        for line in result.stdout.splitlines():
-            parts = line.split(":")
-            if len(parts) == 3 and parts[1] == "connected" and parts[2] != "--":
-                return parts[2]
-    except subprocess.CalledProcessError:
-        return None
-    return None
-
-def monitor_wifi_and_timeout():
-    """Wait 5 minutes, then reboot if still not Wi-Fi connected"""
-    log_debug("Monitor thread started. Waiting for 5 minutes.")
-    time.sleep(300)  # 5 minutes
-    print("[INFO] 5 minutes timed out.")
-
-    #subprocess.run(["nmcli", "connection", "down", "HOTSPOT"], check=False)
-    log_debug("5 minutes timeout reached.")
-
-    # Check Wi-Fi connection
-    conn_name = check_wifi_connection()
-    if not conn_name or conn_name == "HOTSPOT":
-        log_debug("Wi-Fi not connected after 5 minutes. Rebooting now...")
-        print("[INFO] Wi-Fi not connected after 5 minutes, rebooting.")
-        try:
-            # Direct Python reboot
-            subprocess.run(["systemctl", "reboot"], check=True)
-            log_debug("Systemctl reboot command executed successfully.")
-        except Exception as e:
-            log_debug(f"Failed to execute reboot: {e}")
-    else:
-        log_debug("Wi-Fi connected ({conn_name}), no reboot needed.")
-        print(f"[INFO] Wi-Fi connected ({conn_name}), no reboot needed.")
-
-@app.route("/", methods=["GET", "POST"])
-def index():
-    conn_name = check_wifi_connection()
-    if conn_name and conn_name != "HOTSPOT":
-        return f"<center><h1>Raspberry Pi IP:</h1><p>{get_ip()}</p></center>"
-    message = None
-    if request.method == "POST":
-        ssid = request.form["ssid"]
-        password = request.form["password"]
-
-        # Get existing profiles
-        existing = subprocess.run(
-            ["nmcli", "-t", "-f", "NAME", "connection", "show"],
-            capture_output=True, text=True
-        )
-        existing_profiles = existing.stdout.splitlines()
-
-        try:
-            if ssid in existing_profiles:
-                subprocess.run(
-                    ["nmcli", "connection", "modify", ssid, "wifi-sec.psk", password],
-                    check=True
-                )
-            else:
-                subprocess.run([
-                    "nmcli", "connection", "add", "type", "wifi", "ifname", "wlan0",
-                    "con-name", ssid, "ssid", ssid,
-                    "wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", password
-                ], check=True)
-
-            subprocess.run(["nmcli", "connection", "up", ssid], check=True)
-            time.sleep(5)
-            connected = check_wifi_connection()
-            if connected == ssid:
-                message = f"Connected to {ssid}. The setup server will shut down shortly."
-                log_debug("a connection was made")
-                #subprocess.run(["nmcli", "connection", "down", "HOTSPOT"], check=False)
-                set_led(False)  # Turn LED off when Wi-Fi connects
-            else:
-                message = f"Failed to connect to {ssid}."
-        except subprocess.CalledProcessError:
-            message = "Error configuring Wi-Fi."
-
-    return render_template_string(html_form, message=message)
-
-def get_ip():
-    import socket
-    ip = "Unknown"
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-    except Exception:
-        pass
-    return ip
-
-if __name__ == "__main__":
-    #clear the log at start
-    open("/home/hans/wifidebug.txt", "w").close()
-    log_debug(" * * * * * * start wificonfig.py " * * * * * * ")
-    try:
-        with open("/sys/class/leds/ACT/trigger", "w") as f:
-            f.write("none")
-    except Exception as e:
-        print(f"[WARN] Could not disable LED trigger: {e}")
-
-    # Wait a bit for Wi-Fi to initialize
-    for _ in range(10):  # 10 attempts, 1 sec apart
-        conn_name = check_wifi_connection()
-        if conn_name and conn_name != "HOTSPOT":
-            set_led(False)
-            log_debug("we were connected at start")
-            break
-        time.sleep(1)
-    else:
-        # Wi-Fi still not connected, keep LED on
-        set_led(True)
-        log_debug("we were not connected at start")
-
-    # Start timeout monitor thread
-    threading.Thread(target=monitor_wifi_and_timeout, daemon=True).start()
-    app.run(host="0.0.0.0", port=8000)
-```
-Ctrl x
 ## setup service
-The next thing to do is setup a service that starts at boot and runs /home/user/wificonfig.py<br>
-This service automaztically after 6 minutes. During this time we can discover the ip (rpi_domo:8000)
-**nano /etc/systemd/system/wificonfig.service**
-```
-[Unit]
-Description=Wi-Fi Setup Flask Server
-After=network.target
-Wants=network.target
+The next thing to do is setup a service that starts at boot and does the following:
+ - it starts /home/user/wificonfig.py<br>
+ - after 6 minutes it is not needed anymore and stops
+ - when it stops it kills the eventually running wificonfig.py
+ - During this time we can discover the ip (rpi_domo:8000)
 
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/home/hans
-ExecStart=/usr/bin/python3 /home/hans/wificonfig.py
-
-# Stop the service after 6 minutes (360 seconds)
-# that wil also stop wificonfig.py (the flask server)
-RuntimeMaxSec=360
-KillMode=process
-Restart=no
-
-[Install]
-WantedBy=multi-user.target
-```
-Ctrl x
-we need to enable the service
-**systemctl daemon-reload**
-**systemctl enable wificonfig.service**
-**systemctl start wificonfig.service**
+we should copy the file wificonfig.service in /etc/systemd/system/  <br>
+check with **nano /etc/systemd/system/wificonfig.service** that the path to wificonfig.py is correct. 
+We need to enable the service and make it run at boot with the following commands:
+- **systemctl daemon-reload**
+- **systemctl enable wificonfig.service**
+- **systemctl start wificonfig.service**
 
 ## testing
 It is important to test everything well. Be sure that the flask server is not pointed to the same port as an eventual other server in your system (see below). If there is an error you may need to put the sd card in a cardreader and use a linux system to edit.<br>
-First run python3 wificonfig.py from the commandline to check for errors. 
+Always first run python3 wificonfig.py from the commandline to check for errors. 
 check if the service is running **systemctl status wificonfig.service**
-**nmcli connection up HOTSPOT** check in your networks if it is there. You can try to connect to it. When succeeded you can open a terminal on the ip and issue **nmcli connection down HOTSPOT**<br>
-When everything works and you are connected to wifi, you can **nmcli connection show --active** to find the active connection. We are going to corrupt this, so that it cannot connect on reboot. Lets assume the active connection is hansiart.  You can **ls /etc/NetworkManager/system-connections** now you will see the name is hansiart.nmconnection. Now **nano /etc/NetworkManager/system-connection/hansiart.nmconnection** and edit the psk= to make it invalid to your wifi. Ctrl x to save and reboot. After a minute, the onboard led activity stops and the led goes on. Now the hotspot shows up in the available networks. Connect to the hotspot and browse to 192.168.4.1:8000 (add :portnumber when it is not 80). Fill up the form and submit. Now after a lot of flashing the onboard led goes out. The rpi is are connected to your wifi.  
+Now we can reboot. If the raspberry was connected before, it comes up and after some time you can browse to its ip:8000 or <yourhostname>.local:8000 to see the ip information page.
+
+When everything works and you are connected to wifi, you can **nmcli connection show --active** to find the active connection. We are going to corrupt this, so that it cannot connect on reboot. Lets assume the active connection is hansiart.  You can **ls /etc/NetworkManager/system-connections** now you will see the name is hansiart.nmconnection. 
+
+Now **nano /etc/NetworkManager/system-connection/hansiart.nmconnection** and edit the psk= to make it invalid to your wifi. Ctrl x to save and reboot. After a minute, the onboard led activity stops. Now the wifi connection is checked and after that, the led goes on. Now the hotspot shows up in the available networks. Connect to the hotspot and browse to 192.168.4.1:8000 (add :portnumber when it is not 80). Fill up the form and submit. Now after a lot of flashing the onboard led goes out. The rpi is are connected to your wifi.  
+
+I this didnt work and your raspberry connected as usual, ther is probably anothee connection with the right credentials. you should repeat the step above.
 
 ## additional server
-If you have another server in your system that serves a homepage, you can point the last line in wificonfig.py to port 5000 instead of 80
+If you already have another server in your system that serves a homepage, you can point the last line in wificonfig.py to port 5000 instead of 80
 so it doesn't conflict with your webserver.<br>
 To prevent that you have to remember this portnumber, here is a smart trick that integrates the flask server and the other.<br>
 Rename your index.html to index.php and ensure that you have php installed<br>
