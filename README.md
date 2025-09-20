@@ -1,4 +1,4 @@
-A very simple wifimanager using Network Manager. Easy to setup in 4 simple steps.
+##A very simple wifimanager using Network Manager. Easy to setup in 4 simple steps.
 
 When you want your headless raspberry project to be portable so that it is easy to connect to any wifi network, you need this.<br>
 
@@ -22,8 +22,8 @@ When the hotspot is up and nothing happens (no user attempts to connect), it tim
 <br>[setup service](#setup-service)
 
 
-So what do we need. 
-We need a modern raspberry linux that runs networkmanager (bookworm) with flask and Perl installed.<br>
+What do we need: 
+We need a modern raspberry linux that runs networkmanager (bookworm) with python3 flask installed.<br>
 **apt install python3-flask**<br>
 
 ## download_files
